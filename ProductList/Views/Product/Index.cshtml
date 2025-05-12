@@ -1,0 +1,316 @@
+﻿@model ProductList.Models.ProductViewModel
+
+@{
+    ViewBag.Title = "Product List";
+}
+
+<style>
+    /* Hide scrollbar until height is exceeded */
+    div[style*="max-height"]::-webkit-scrollbar {
+        width: 0.5em;
+    }
+
+    div[style*="max-height"]::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.5);
+        border-radius: 0.5em;
+    }
+
+    div[style*="max-height"]::-webkit-scrollbar-track {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+</style>
+<br />
+
+<div class="row">
+
+    <div class="col-md-6">
+
+
+        <div class="mb-3">
+            <label for="supplierDropdown" class="form-label">Supplier:</label>
+            @Html.DropDownListFor(model => model.SelectedSupplierId,
+              new SelectList(Model.Suppliers, "Id", "Name"),
+              "Select a supplier",
+              new { @id = "supplierDropdown", @class = "form-select" })
+        </div>
+
+        <div class="mb-3">
+            <label for="categoryDropdown" class="form-label">Category:</label>
+            @Html.DropDownListFor(model => model.SelectedCategoryId,
+              new SelectList(Model.Categories, "Id", "Name"),
+              "Select a category",
+              new { @id = "categoryDropdown", @class = "form-select" })
+        </div>
+
+        <div class="mb-3">
+            <label for="productDropdown" class="form-label">Product:</label>
+            @Html.DropDownListFor(model => model.SelectedProductId,
+              Enumerable.Empty<SelectListItem>(),
+              "Select a product",
+              new { @id = "productDropdown", @class = "form-select", disabled = "disabled" })
+        </div>
+    </div>
+
+    <div class="col-md-6">
+
+        <div class="mb-3">
+            <label for="productNameTextbox" class="form-label">Value:</label>
+            <input type="text" id="productNameTextbox" class="form-control" placeholder="Only numbers are allowed" />
+        </div>
+
+        <div class="mb-3">
+            <label for="serialTextbox" class="form-label">Serial:</label>
+            <input type="text" id="serialTextbox" class="form-control" placeholder="Max is 10 digits" />
+        </div>
+
+        <div class="mb-3 d-grid gap-2" style="padding-top: 25px;">
+            <input type="button" id="addProductButton" value="Add" class="btn btn-primary" />
+        </div>
+    </div>
+</div>
+
+
+<div class="col-md-4">
+    <div style="max-height: 300px; overflow-y: auto;">
+        <table class="table table-sm" id="rawData">
+            <thead style="position: sticky; top: 0; background-color: lightgrey;">
+            <tbody>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div style="height: 300px; overflow-y: scroll;">
+    <table class="table table-condensed" id="productTable">
+        <thead style="position: sticky; top: 0; background-color: lightgrey;">
+            <tr>
+                <th style="width: 5%;">ID</th>
+                <th style="width: 20%;">Category</th>
+                <th style="width: 20%;">Product</th>
+                <th style="width: 20%;">Value</th>
+                <th style="width: 20%;">Timestamp</th>
+                <th style="width: 15%;">ACTION</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            // Disable input fields until selection
+            $("#categoryDropdown, #productDropdown, #productNameTextbox, #serialTextbox, #addProductButton").prop("disabled", true);
+
+            // ----------------------------------------------------------------------
+            // Control Serial and Value Input
+            // ----------------------------------------------------------------------
+            // Handle value textbox (numeric only)
+            $("#productNameTextbox").on("input", function () {
+                var value = $(this).val().replace(/\D/g, ''); // Remove non-numeric characters
+                $(this).val(value); // Update textbox with valid value
+            });
+
+            // Handle serial textbox (max 10 digits)
+            $("#serialTextbox").on("input", function () {
+                var serial = $(this).val();
+                if (serial.length > 10) {
+                    $(this).val(serial.slice(0, 10)); // Limit the serial to 10 digits
+                }
+            });
+
+            // ----------------------------------------------------------------------
+            // Populate Dropdowns (Category and Product)
+            // ----------------------------------------------------------------------
+
+            // Populate categories based on selected supplier
+            $("#supplierDropdown").change(function () {
+                var supplierId = $(this).val();
+                if (supplierId) {
+                    $.get('@Url.Action("GetCategoriesBySupplier", "Product")', { supplierId: supplierId })
+                        .done(function (data) {
+                            var categoryNames = data.split(";")[0].split(",");
+                            var categoryIds = data.split(";")[1].split(",");
+                            var categories = [];
+                            for (var i = 0; i < categoryNames.length; i++) {
+                                categories.push({ id: categoryIds[i], name: categoryNames[i] });
+                            }
+
+                            var categoryDropdown = $("#categoryDropdown");
+                            categoryDropdown.empty();
+                            categoryDropdown.append($("<option></option>").val("").text("Select a category"));
+                            $.each(categories, function (i, category) {
+                                categoryDropdown.append($("<option></option>").val(category.id).text(category.name));
+                            });
+                            categoryDropdown.prop("disabled", false);
+                        });
+                } else {
+                    $("#categoryDropdown").empty().append($("<option></option>").val("").text("Select a category")).prop("disabled", true);
+                    $("#productDropdown").empty().append($("<option></option>").val("").text("Select a product")).prop("disabled", true);
+                }
+            });
+
+            // Populate products based on selected category
+            $("#categoryDropdown").change(function () {
+                var categoryId = $(this).val();
+                if (categoryId) {
+                    $.get('@Url.Action("GetProductsByCategory", "Product")', { categoryId: categoryId })
+                        .done(function (data) {
+                            var productNames = data.split(";")[0].split(",");
+                            var productIds = data.split(";")[1].split(",");
+                            var products = [];
+                            for (var i = 0; i < productNames.length; i++) {
+                                products.push({ id: productIds[i], name: productNames[i] });
+                            }
+
+                            var productDropdown = $("#productDropdown");
+                            productDropdown.empty();
+                            productDropdown.append($("<option></option>").val("").text("Select a product"));
+                            $.each(products, function (i, product) {
+                                productDropdown.append($("<option></option>").val(product.id).text(product.name));
+                            });
+                            productDropdown.prop("disabled", false);
+                        });
+                } else {
+                    $("#productDropdown").empty().append($("<option></option>").val("").text("Select a product")).prop("disabled", true);
+                }
+            });
+            // Enable Value and Serial input after a product is selected
+            $("#productDropdown").change(function () {
+                var selectedProduct = $(this).val();
+                if (selectedProduct) {
+                    $("#productNameTextbox").prop("disabled", false);
+                } else {
+                    $("#productNameTextbox, #serialTextbox, #addProductButton").prop("disabled", true);
+                }
+            });
+
+            $("#productNameTextbox").change(function () {
+                var selectedProduct = $(this).val();
+                if (selectedProduct) {
+                    $("#serialTextbox").prop("disabled", false);
+                } else {
+                    $(" #addProductButton").prop("disabled", true);
+                }
+            });
+
+            $("#serialTextbox").change(function () {
+                var selectedProduct = $(this).val();
+                if (selectedProduct) {
+                    $("#addProductButton").prop("disabled", false);
+                }
+            });
+
+            // ----------------------------------------------------------------------
+            // Add Product Button
+            // ----------------------------------------------------------------------
+            $("#addProductButton").click(function () {
+                var productId = $("#productDropdown").val();
+                var productName = $("#productNameTextbox").val();
+                var serial = $("#serialTextbox").val();
+
+                if (productId && productName && serial) {
+                    $.get('@Url.Action("AddProduct", "Product")', { productId: productId, productName: productName, serial: serial })
+                        .done(function (data) {
+                            if (data === "OK") {
+                                var productTable = $("#productTable tbody");
+                                var newRow = $("<tr></tr>");
+
+                                newRow.append($("<td></td>").text(productId));
+                                newRow.append($("<td></td>").append(
+                                    $("<select></select>").addClass("form-select").prop("disabled", true)
+                                        .append($("<option></option>").val($("#categoryDropdown").val()).text($("#categoryDropdown option:selected").text()))));
+                                newRow.append($("<td></td>").append(
+                                    $("<select></select>").addClass("form-select").prop("disabled", true)
+                                        .append($("<option></option>").val(productId).text($("#productDropdown option:selected").text()))));
+                                newRow.append($("<td></td>").append($("<input>").prop("type", "text").addClass("form-control").prop("disabled", true).val(productName)));
+                                newRow.append($("<td></td>").text(new Date().toLocaleString()));
+                                newRow.append($("<td></td>").append(
+                                    $("<button></button>").text("EDIT").addClass("btn btn-success btn-sm").click(function () {}).css({ "width": "50%", "padding-right": "10px" }),
+                                    $("<button></button>").text("DELETE").addClass("btn btn-danger btn-sm").click(function () {
+                                        $(this).closest("tr").remove();
+                                    }).css({ "width": "50%" })
+                                ));
+
+                                productTable.append(newRow);
+
+                                // Reset input fields
+                                $("#productNameTextbox").val("").prop("disabled", true);
+                                $("#serialTextbox").val("").prop("disabled", true);
+                                $("#productDropdown").prop("disabled", true);
+                                $("#categoryDropdown").val("");
+                                $("#productDropdown").empty().append($("<option></option>").val("").text("Select a product")).prop("disabled", true);
+                                $("#categoryDropdown").focus();
+                            } else {
+                                alert("Failed to add product.");
+                            }
+                        });
+
+
+
+                }
+
+
+
+
+
+
+            });
+        });
+    </script>
+    <script>
+        // ----------------------------------------------------------------------
+        // EDIT BUTTON
+        // ----------------------------------------------------------------------
+        $(document).on("click", ".btn-success", function () {
+            var $editBtn = $(this);
+            var $row = $editBtn.closest("tr");
+
+            // Disable all other edit buttons
+            $(".btn-success").prop("disabled", true);
+
+            // Enable text input fields in this row
+            $row.find("input[type='text']").prop("disabled", false);
+
+            // Disable delete button temporarily
+            $row.find(".btn-danger").prop("disabled", true);
+
+            // Change EDIT button to SAVE
+            $editBtn.text("SAVE")
+                .removeClass("btn-success")
+                .addClass("btn-primary")
+                .prop("disabled", false);
+
+            // Restrict input to numbers only
+            $row.find("input[type='text']").on("input", function () {
+                var value = this.value.replace(/\D/g, '');
+                if (value.length > 6) {
+                    value = value.slice(0, 6);
+                }
+                this.value = value;
+            });
+        });
+
+        // SAVE button logic (after it was changed from EDIT)
+        $(document).on("click", ".btn-primary", function () {
+            var $saveBtn = $(this);
+            var $row = $saveBtn.closest("tr");
+
+            // Save logic here: could include sending updated data to server via AJAX
+
+            // Disable inputs again
+            $row.find("input[type='text']").prop("disabled", true);
+            $row.find(".btn-danger").prop("disabled", false);
+
+            // Change SAVE back to EDIT
+            $saveBtn.text("EDIT")
+                .removeClass("btn-primary")
+                .addClass("btn-success");
+
+            // Enable other edit buttons
+            $(".btn-success").prop("disabled", false);
+        });
+    </script>
+
+}
